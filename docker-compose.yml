@@ -1,0 +1,63 @@
+version: '3.0'
+ 
+services:
+   reverseproxy:
+      container_name: reverseproxy
+      image: httpd:2.4-alpine
+      volumes:
+          - ./httpd/httpd.conf:/usr/local/apache2/conf/httpd.conf
+          - ./httpd/server.crt:/usr/local/apache2/conf/server.crt
+          - ./httpd/server.key:/usr/local/apache2/conf/server.key
+      ports:
+          - "80:80"
+          - "443:443"
+      restart: always
+
+   db:
+      container_name: db
+      image: mariadb:10.5.1
+      environment:
+          MYSQL_RANDOM_ROOT_PASSWORD: 1
+      volumes:
+          - dbdata:/var/lib/mysql
+          - ./db:/docker-entrypoint-initdb.d
+      restart: always
+   
+   dbadmin:
+      container_name: dbadmin
+      depends_on:
+          - db
+          - reverseproxy
+      image: phpmyadmin/phpmyadmin
+      restart: always
+      environment:
+          PMA_HOST: db
+          PMA_ABSOLUTE_URI: http://testserver/dbadmin/
+ 
+   cron:
+      container_name: cron
+      build:
+          context: cron
+          args:
+            CLOUD_URL: https://test.com/nextcloud/remote.php/webdav/
+            CLOUD_USER: testuser
+            CLOUD_PASS: testpass
+            CLOUD_VENDOR: nextcloud
+            CLOUD_TYPE: webdav
+      volumes:
+          - ./webapp/sync:/sync
+      restart: always
+   
+   webapp:
+      container_name: webapp
+      depends_on:
+          - db
+          - reverseproxy
+      build:
+          context: webapp
+      restart: always
+      volumes:
+          - ./webapp/sync/log:/log
+   
+volumes:
+    dbdata:
